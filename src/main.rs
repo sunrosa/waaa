@@ -1,4 +1,4 @@
-use std::{env, fs::OpenOptions, time::Duration};
+use std::{env, time::Duration};
 
 use log::{error, info, trace};
 use pishock_rs::{PiShockAccount, PiShocker};
@@ -9,6 +9,7 @@ use serenity::{
     client::{Context, EventHandler},
     Client,
 };
+use tokio::signal;
 
 struct Handler {
     shocker: PiShocker,
@@ -92,6 +93,18 @@ async fn main() {
         .event_handler(Handler { shocker })
         .await
         .expect("Error creating Discord client.");
+
+    {
+        let shard_manager = client.shard_manager.clone();
+
+        tokio::spawn(async move {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Could not register ctrl+c handler.");
+            info!("Shutting down all shards...");
+            shard_manager.shutdown_all().await;
+        });
+    }
 
     if let Err(e) = client.start().await {
         println!("Client start error: {e:?}");
