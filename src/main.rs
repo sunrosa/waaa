@@ -1,6 +1,6 @@
 use std::{env, fs::OpenOptions, time::Duration};
 
-use log::{error, info};
+use log::{error, info, trace};
 use pishock_rs::{PiShockAccount, PiShocker};
 use regex::Regex;
 use serenity::{
@@ -28,6 +28,12 @@ impl EventHandler for Handler {
             .split('/')
             .map(str::to_string)
             .collect();
+
+        trace!(
+            "Message text: \"{}\" -> Split into: \"{}\"",
+            msg.content,
+            message_words.join(", ")
+        );
 
         let do_shock = 'do_shock: {
             // If the message mentions the bot's owner, set do_shock to true.
@@ -89,24 +95,23 @@ async fn main() {
 }
 
 fn initialize_log() {
-    #[cfg(not(debug_assertions))]
-    let log_level = simplelog::LevelFilter::Info;
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{} {} {}] {}",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Warn)
+        .level_for(env!("CARGO_PKG_NAME"), log::LevelFilter::Trace)
+        .chain(std::io::stdout())
+        .chain(fern::log_file("output.log").unwrap())
+        .apply()
+        .unwrap();
 
-    #[cfg(debug_assertions)]
-    let log_level = simplelog::LevelFilter::Trace;
-
-    simplelog::WriteLogger::init(
-        log_level,
-        simplelog::ConfigBuilder::new()
-            .set_time_format_rfc3339()
-            .build(),
-        OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open("log")
-            .expect("Error accessing or creating log file!"),
-    )
-    .expect("Error initializing logger!");
     info!(
         "STARTED {} {}",
         env!("CARGO_PKG_NAME"),
