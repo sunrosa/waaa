@@ -43,6 +43,7 @@ impl EventHandler for Handler {
                     .parse()
                     .expect("Could not parse OWNER_USER_ID into u64."),
             )) {
+                trace!("Message mentions bot owner. Shock impending...");
                 break 'do_shock true;
             }
 
@@ -50,15 +51,18 @@ impl EventHandler for Handler {
             for word in message_words {
                 let word_lowercase = word.to_lowercase();
                 if trigger_words.iter().any(|x| *x == word_lowercase) {
+                    trace!("Caught trigger word. Shock impending...");
                     break 'do_shock true;
                 }
             }
 
             // If no predicates match...
+            trace!("Message does not match shock parameters.");
             false
         };
 
         if do_shock {
+            info!("Shocking!");
             self.shocker
                 .shock(40, Duration::from_secs(1))
                 .await
