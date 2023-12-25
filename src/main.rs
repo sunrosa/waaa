@@ -16,7 +16,11 @@ struct Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        let message_words: Vec<String> = msg.content.split(' ').map(str::to_string).collect();
+        let message_words: Vec<String> = msg
+            .content
+            .split(' ')
+            .map(|s| s.chars().filter(|c| c.is_alphabetic()).collect::<String>())
+            .collect();
         let trigger_words: Vec<String> = env::var("TRIGGER_WORDS")
             .expect("Could not access TRIGGER_WORDS.")
             .split('/')
@@ -48,7 +52,7 @@ impl EventHandler for Handler {
 
         if do_shock {
             self.shocker
-                .shock(40, Duration::from_secs(2))
+                .shock(40, Duration::from_secs(1))
                 .await
                 .unwrap();
         }
