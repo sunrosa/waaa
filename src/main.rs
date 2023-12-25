@@ -2,6 +2,7 @@ use std::{env, fs::OpenOptions, time::Duration};
 
 use log::{error, info};
 use pishock_rs::{PiShockAccount, PiShocker};
+use regex::Regex;
 use serenity::{
     all::{GatewayIntents, Message, Ready, UserId},
     async_trait,
@@ -16,10 +17,11 @@ struct Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        let message_words: Vec<String> = msg
-            .content
-            .split(' ')
-            .map(|s| s.chars().filter(|c| c.is_alphabetic()).collect::<String>())
+        let split_sentence = Regex::new(r"(\b[^\s]+\b)").unwrap();
+
+        let message_words: Vec<String> = split_sentence
+            .captures_iter(&msg.content)
+            .map(|x| x.get(0).unwrap().as_str().to_owned())
             .collect();
         let trigger_words: Vec<String> = env::var("TRIGGER_WORDS")
             .expect("Could not access TRIGGER_WORDS.")
