@@ -15,9 +15,8 @@ struct Handler {
     shocker: PiShocker,
 }
 
-#[async_trait]
-impl EventHandler for Handler {
-    async fn message(&self, ctx: Context, msg: Message) {
+impl Handler {
+    async fn word_shock(&self, ctx: Context, msg: Message) {
         let split_sentence = Regex::new(r"(\b[^\s]+\b)").unwrap();
 
         let message_words: Vec<String> = split_sentence
@@ -63,12 +62,23 @@ impl EventHandler for Handler {
         };
 
         if do_shock {
+            let typing = msg.channel_id.start_typing(&ctx.http);
+
             info!("Shocking!");
             self.shocker
                 .shock(40, Duration::from_secs(1))
                 .await
                 .unwrap();
+
+            typing.stop();
         }
+    }
+}
+
+#[async_trait]
+impl EventHandler for Handler {
+    async fn message(&self, ctx: Context, msg: Message) {
+        self.word_shock(ctx, msg).await;
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
@@ -83,8 +93,7 @@ async fn main() {
 
     let shocker = get_shocker().await;
 
-    let discord_token = env::var("DISCORD_TOKEN")
-        .expect("Could not access Discord token in environment variables.");
+    let discord_token = env::var("DISCORD_TOKEN").expect("Could not access DISCORD_TOKEN.");
     let gateway_intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
