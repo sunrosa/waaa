@@ -1,6 +1,6 @@
 mod config;
 
-use std::{env, time::Duration};
+use std::{collections::HashMap, env, time::Duration};
 
 use log::{debug, error, info, trace};
 use pishock_rs::{PiShockAccount, PiShocker};
@@ -12,13 +12,47 @@ use serenity::{
     Client,
 };
 
+/// The number of shocks a user has dealt during the current span of time.
+#[derive(Debug, Clone)]
+struct ShockCooldown {
+    /// The timestamp that the block started at.
+    stopwatch: Option<std::time::Instant>,
+    /// The number of times the user has dealt a shock during the last block.
+    shock_count: u32,
+}
+
+impl ShockCooldown {
+    /// Are there room for more shocks during the current segment? Returns true if the cooldown has room for the shock. Returns false if too many shocks have already been dealt.
+    ///
+    /// # Parameters
+    /// * `segment_length` - The amount of time between segment resets.
+    /// * `maximum_shocks` - The maximum number of shocks allowed before a segment reset.
+    fn can_shock(&mut self, segment_length: std::time::Duration, maximum_shocks: u32) -> bool {
+        let mut stopwatch = self.stopwatch.unwrap_or(std::time::Instant::now());
+
+        // Reset the cooldown if the segment_length has been reached.
+        if stopwatch.elapsed() >= segment_length {
+            stopwatch = std::time::Instant::now();
+            self.shock_count = 0;
+        }
+
+        // Check to see if the shock_count is below or equal to maximum. Return true if so, and increment shock_count.
+        if self.shock_count <= maximum_shocks {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 struct Handler {
     shocker: PiShocker,
     config: config::Config,
+    user_shock_cooldowns: HashMap<UserId, ShockCooldown>,
 }
 
 impl Handler {
-    async fn word_shock(&self, ctx: Context, msg: Message) {
+    async fn word_shock(&mut self, ctx: Context, msg: Message) {
         let split_sentence = Regex::new(r"(\b[^\s]+\b)").unwrap();
 
         let message_words: Vec<String> = split_sentence
@@ -33,6 +67,35 @@ impl Handler {
         );
 
         let do_shock = 'do_shock: {
+            if !self
+                .user_shock_cooldowns
+                .entry(msg.author.id)
+                .or_insert(ShockCooldown {
+                    stopwatch: None,
+                    shock_count: 0,
+                })
+                .can_shock(
+                    std::time::Duration::from_secs(self.config.cooldown_segment_duration as u64),
+                    self.config.max_shocks_per_segment,
+                )
+            {
+                trace!(
+                    "User has exceeded shock limit for the current segment {}/{}",
+                    self.user_shock_cooldowns
+                        .get(&msg.author.id)
+                        .expect(
+                            format!(
+                                "Could not access user shock cooldown for {}.",
+                                msg.author.name
+                            )
+                            .as_str()
+                        )
+                        .shock_count,
+                    self.config.max_shocks_per_segment
+                );
+                break 'do_shock false;
+            }
+
             // If the message mentions any of the bot's operators, set do_shock to true.
             if self
                 .config
@@ -74,6 +137,16 @@ impl Handler {
                 .unwrap();
 
             typing.stop();
+
+            // Update shock cooldown by adding 1 to shock_count.
+            let mut shock_cooldown = self
+                .user_shock_cooldowns
+                .get(&msg.author.id)
+                .unwrap()
+                .clone();
+            shock_cooldown.shock_count += 1;
+            self.user_shock_cooldowns
+                .insert(msg.author.id, shock_cooldown);
         }
     }
 }
@@ -103,7 +176,11 @@ async fn main() {
         | GatewayIntents::MESSAGE_CONTENT;
 
     let mut client = Client::builder(&config.discord_config.bot_token, gateway_intents)
-        .event_handler(Handler { shocker, config })
+        .event_handler(Handler {
+            shocker,
+            config,
+            user_shock_cooldowns: HashMap::new(),
+        })
         .await
         .expect("Error creating Discord client.");
 

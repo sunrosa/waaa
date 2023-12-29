@@ -5,6 +5,8 @@ pub struct Config {
     pub pishock_config: PishockConfig,
     pub discord_config: DiscordConfig,
     pub trigger_words: Vec<String>,
+    pub cooldown_segment_duration: u32,
+    pub max_shocks_per_segment: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
