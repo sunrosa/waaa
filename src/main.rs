@@ -1,4 +1,5 @@
 mod config;
+mod context;
 
 use std::{collections::HashMap, env, time::Duration};
 
@@ -45,116 +46,12 @@ impl ShockCooldown {
     }
 }
 
-struct Handler {
-    shocker: PiShocker,
-    config: config::Config,
-    user_shock_cooldowns: HashMap<UserId, ShockCooldown>,
-}
-
-impl Handler {
-    async fn word_shock(&mut self, ctx: Context, msg: Message) {
-        let split_sentence = Regex::new(r"(\b[^\s]+\b)").unwrap();
-
-        let message_words: Vec<String> = split_sentence
-            .captures_iter(&msg.content)
-            .map(|x| x.get(0).unwrap().as_str().to_owned())
-            .collect();
-
-        trace!(
-            "Message text: \"{}\" -> Split into: \"{}\"",
-            msg.content,
-            message_words.join(", ")
-        );
-
-        let do_shock = 'do_shock: {
-            if !self
-                .user_shock_cooldowns
-                .entry(msg.author.id)
-                .or_insert(ShockCooldown {
-                    stopwatch: None,
-                    shock_count: 0,
-                })
-                .can_shock(
-                    std::time::Duration::from_secs(self.config.cooldown_segment_duration as u64),
-                    self.config.max_shocks_per_segment,
-                )
-            {
-                trace!(
-                    "User has exceeded shock limit for the current segment {}/{}",
-                    self.user_shock_cooldowns
-                        .get(&msg.author.id)
-                        .expect(
-                            format!(
-                                "Could not access user shock cooldown for {}.",
-                                msg.author.name
-                            )
-                            .as_str()
-                        )
-                        .shock_count,
-                    self.config.max_shocks_per_segment
-                );
-                break 'do_shock false;
-            }
-
-            // If the message mentions any of the bot's operators, set do_shock to true.
-            if self
-                .config
-                .discord_config
-                .operator_ids
-                .iter()
-                .any(|x| msg.mentions_user_id(<u64 as Into<UserId>>::into(*x)))
-            {
-                trace!("Message mentions bot owner. Shock impending...");
-                break 'do_shock true;
-            }
-
-            // If any of the words in the message are a trigger word, set do_shock to true.
-            for word in message_words {
-                let word_lowercase = word.to_lowercase();
-                if self
-                    .config
-                    .trigger_words
-                    .iter()
-                    .any(|x| *x == word_lowercase)
-                {
-                    trace!("Caught trigger word. Shock impending...");
-                    break 'do_shock true;
-                }
-            }
-
-            // If no predicates match...
-            trace!("Message does not match shock parameters.");
-            false
-        };
-
-        if do_shock {
-            let typing = msg.channel_id.start_typing(&ctx.http);
-
-            info!("Shocking!");
-            self.shocker
-                .shock(40, Duration::from_secs(1))
-                .await
-                .unwrap();
-
-            typing.stop();
-
-            // Update shock cooldown by adding 1 to shock_count.
-            let mut shock_cooldown = self
-                .user_shock_cooldowns
-                .get(&msg.author.id)
-                .unwrap()
-                .clone();
-            shock_cooldown.shock_count += 1;
-            self.user_shock_cooldowns
-                .insert(msg.author.id, shock_cooldown);
-        }
-    }
-}
+struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        self.word_shock(ctx, msg).await;
+        word_shock(ctx, msg).await;
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
@@ -162,28 +59,120 @@ impl EventHandler for Handler {
     }
 }
 
+async fn word_shock(ctx: Context, msg: Message) {
+    let mut data = ctx.data.write().await;
+    let config = data.get::<context::Config>().unwrap();
+    let shocker = data.get::<context::Shocker>().unwrap();
+
+    let split_sentence = Regex::new(r"(\b[^\s]+\b)").unwrap();
+
+    let message_words: Vec<String> = split_sentence
+        .captures_iter(&msg.content)
+        .map(|x| x.get(0).unwrap().as_str().to_owned())
+        .collect();
+
+    trace!(
+        "Message text: \"{}\" -> Split into: \"{}\"",
+        msg.content,
+        message_words.join(", ")
+    );
+
+    let do_shock = 'do_shock: {
+        let user_shock_cooldowns = data.get_mut::<context::UserShockCooldowns>().unwrap();
+
+        if user_shock_cooldowns
+            .entry(msg.author.id)
+            .or_insert(ShockCooldown {
+                stopwatch: None,
+                shock_count: 0,
+            })
+            .can_shock(
+                std::time::Duration::from_secs(config.cooldown_segment_duration as u64),
+                config.max_shocks_per_segment,
+            )
+        {
+            trace!(
+                "User has exceeded shock limit for the current segment {}/{}",
+                user_shock_cooldowns
+                    .get(&msg.author.id)
+                    .expect(
+                        format!(
+                            "Could not access user shock cooldown for {}.",
+                            msg.author.name
+                        )
+                        .as_str()
+                    )
+                    .shock_count,
+                config.max_shocks_per_segment
+            );
+            break 'do_shock false;
+        }
+
+        // If the message mentions any of the bot's operators, set do_shock to true.
+        if config
+            .discord_config
+            .operator_ids
+            .iter()
+            .any(|x| msg.mentions_user_id(<u64 as Into<UserId>>::into(*x)))
+        {
+            trace!("Message mentions bot owner. Shock impending...");
+            break 'do_shock true;
+        }
+
+        // If any of the words in the message are a trigger word, set do_shock to true.
+        for word in message_words {
+            let word_lowercase = word.to_lowercase();
+            if config.trigger_words.iter().any(|x| *x == word_lowercase) {
+                trace!("Caught trigger word. Shock impending...");
+                break 'do_shock true;
+            }
+        }
+
+        // If no predicates match...
+        trace!("Message does not match shock parameters.");
+        false
+    };
+
+    if do_shock {
+        let user_shock_cooldowns = data.get_mut::<context::UserShockCooldowns>().unwrap();
+
+        let typing = msg.channel_id.start_typing(&ctx.http);
+
+        info!("Shocking!");
+        shocker.shock(40, Duration::from_secs(1)).await.unwrap();
+
+        typing.stop();
+
+        // Update shock cooldown by adding 1 to shock_count.
+        let mut shock_cooldown = user_shock_cooldowns.get(&msg.author.id).unwrap().clone();
+        shock_cooldown.shock_count += 1;
+        user_shock_cooldowns.insert(msg.author.id, shock_cooldown);
+    }
+}
+
 #[tokio::main]
 async fn main() {
+    // Initialize log and get config from file.
     initialize_log();
     let config = get_config().await;
 
     debug!("{config:?}");
 
+    // Get the shocker from the config.
     let shocker = get_shocker(&config).await;
 
+    // Build gateway intents.
     let gateway_intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
 
+    // Build the client.
     let mut client = Client::builder(&config.discord_config.bot_token, gateway_intents)
-        .event_handler(Handler {
-            shocker,
-            config,
-            user_shock_cooldowns: HashMap::new(),
-        })
+        .event_handler(Handler)
         .await
         .expect("Error creating Discord client.");
 
+    // Spawn a handler for the CTRL-C signal.
     {
         let shard_manager = client.shard_manager.clone();
 
@@ -196,6 +185,15 @@ async fn main() {
         });
     }
 
+    // Initialize client data to be shared across command invocations and shards.
+    {
+        let mut data = client.data.write().await;
+        data.insert::<context::Shocker>(shocker);
+        data.insert::<context::Config>(config);
+        data.insert::<context::UserShockCooldowns>(HashMap::new());
+    }
+
+    // Start the client.
     if let Err(e) = client.start().await {
         println!("Client start error: {e:?}");
     }
