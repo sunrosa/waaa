@@ -89,8 +89,17 @@ async fn word_shock(ctx: Context, msg: Message) {
                 config.max_shocks_per_segment,
             )
         {
-            trace!(
-                "User has exceeded shock limit for the current segment {}/{} ({}/{} seconds)",
+            // The number of seconds until the segment counter is reset.
+            let seconds_until_reset = config.cooldown_segment_duration as u64
+                - user_shock_cooldowns
+                    .get(&msg.author.id)
+                    .unwrap()
+                    .stopwatch
+                    .elapsed()
+                    .as_secs();
+
+            debug!(
+                "User has exceeded shock limit for the current segment {}/{} ({} seconds remaining)",
                 user_shock_cooldowns
                     .get(&msg.author.id)
                     .expect(
@@ -102,14 +111,15 @@ async fn word_shock(ctx: Context, msg: Message) {
                     )
                     .shock_count,
                 config.max_shocks_per_segment,
-                user_shock_cooldowns
-                    .get(&msg.author.id)
-                    .unwrap()
-                    .stopwatch
-                    .elapsed()
-                    .as_secs(),
-                config.cooldown_segment_duration
+                seconds_until_reset,
             );
+            msg.channel_id
+                .say(
+                    &ctx.http,
+                    format!("Wait {} seconds...", seconds_until_reset),
+                )
+                .await
+                .unwrap();
             break 'do_shock false;
         }
 
