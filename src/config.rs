@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Config {
+pub(crate) struct Config {
     pub pishock_config: PishockConfig,
     pub discord_config: DiscordConfig,
     pub trigger_words: Vec<String>,
@@ -10,7 +10,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PishockConfig {
+pub(crate) struct PishockConfig {
     pub api_name: String,
     pub api_username: String,
     pub api_key: String,
@@ -18,7 +18,7 @@ pub struct PishockConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DiscordConfig {
+pub(crate) struct DiscordConfig {
     pub bot_token: String,
     pub operator_ids: Vec<u64>,
 }
