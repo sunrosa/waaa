@@ -1,19 +1,18 @@
 mod config;
 mod context;
-mod message_shock;
+mod shock;
 
-use std::{collections::HashMap, env, time::Duration};
+use std::collections::HashMap;
 
-use log::{debug, error, info, trace};
-use message_shock::word_shock;
+use log::{debug, info};
 use pishock_rs::{PiShockAccount, PiShocker};
-use regex::Regex;
 use serenity::{
-    all::{GatewayIntents, Message, Ready, UserId},
+    all::{GatewayIntents, Message, Ready},
     async_trait,
     client::{Context, EventHandler},
     Client,
 };
+use shock::word_shock;
 
 struct Handler;
 
@@ -82,7 +81,7 @@ fn initialize_log() {
         .format(|out, message, record| {
             out.finish(format_args!(
                 "[{} {} {}] {}",
-                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.9f"),
                 record.level(),
                 record.target(),
                 message

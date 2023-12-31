@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use pishock_rs::PiShocker;
 use serenity::{all::UserId, prelude::*};
 
-use crate::{config, message_shock::ShockCooldown};
+use crate::{config, shock::ShockCooldown};
 
 pub(crate) struct Shocker;
 impl TypeMapKey for Shocker {

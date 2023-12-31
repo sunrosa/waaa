@@ -22,7 +22,8 @@ pub(crate) async fn word_shock(ctx: Context, msg: Message) {
         .collect();
 
     trace!(
-        "Message text: \"{}\" -> Split into: \"{}\"",
+        "{}: Message text: \"{}\" -> Split into: \"{}\"",
+        msg.author.name,
         msg.content,
         message_words.join(", ")
     );
@@ -142,11 +143,7 @@ impl ShockCooldown {
             self.shock_count = 0;
         }
 
-        // Check to see if the shock_count is below or equal to maximum. Return true if so, and increment shock_count.
-        if self.shock_count < maximum_shocks {
-            true
-        } else {
-            false
-        }
+        // Check to see if the shock_count is below or equal to maximum. Return true if so, and increment shock_count. LMFAO...
+        self.shock_count < maximum_shocks
     }
 }
