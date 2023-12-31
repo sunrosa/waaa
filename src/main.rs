@@ -75,54 +75,7 @@ async fn word_shock(ctx: Context, msg: Message) {
         message_words.join(", ")
     );
 
-    let do_shock = 'do_shock: {
-        let user_shock_cooldowns = data.get_mut::<context::UserShockCooldowns>().unwrap();
-
-        if !user_shock_cooldowns
-            .entry(msg.author.id)
-            .or_insert(ShockCooldown {
-                stopwatch: std::time::Instant::now(),
-                shock_count: 0,
-            })
-            .can_shock(
-                std::time::Duration::from_secs(config.cooldown_segment_duration as u64),
-                config.max_shocks_per_segment,
-            )
-        {
-            // The number of seconds until the segment counter is reset.
-            let seconds_until_reset = config.cooldown_segment_duration as u64
-                - user_shock_cooldowns
-                    .get(&msg.author.id)
-                    .unwrap()
-                    .stopwatch
-                    .elapsed()
-                    .as_secs();
-
-            debug!(
-                "User has exceeded shock limit for the current segment {}/{} ({} seconds remaining)",
-                user_shock_cooldowns
-                    .get(&msg.author.id)
-                    .expect(
-                        format!(
-                            "Could not access user shock cooldown for {}.",
-                            msg.author.name
-                        )
-                        .as_str()
-                    )
-                    .shock_count,
-                config.max_shocks_per_segment,
-                seconds_until_reset,
-            );
-            msg.channel_id
-                .say(
-                    &ctx.http,
-                    format!("Wait {} seconds...", seconds_until_reset),
-                )
-                .await
-                .unwrap();
-            break 'do_shock false;
-        }
-
+    let mut do_shock = 'do_shock: {
         // If the message mentions any of the bot's operators, set do_shock to true.
         if config
             .discord_config
@@ -147,6 +100,56 @@ async fn word_shock(ctx: Context, msg: Message) {
         trace!("Message does not match shock parameters.");
         false
     };
+
+    {
+        let user_shock_cooldowns = data.get_mut::<context::UserShockCooldowns>().unwrap();
+
+        if do_shock
+            && !user_shock_cooldowns
+                .entry(msg.author.id)
+                .or_insert(ShockCooldown {
+                    stopwatch: std::time::Instant::now(),
+                    shock_count: 0,
+                })
+                .can_shock(
+                    std::time::Duration::from_secs(config.cooldown_segment_duration as u64),
+                    config.max_shocks_per_segment,
+                )
+        {
+            // The number of seconds until the segment counter is reset.
+            let seconds_until_reset = config.cooldown_segment_duration as u64
+                - user_shock_cooldowns
+                    .get(&msg.author.id)
+                    .unwrap()
+                    .stopwatch
+                    .elapsed()
+                    .as_secs();
+
+            debug!(
+            "User has exceeded shock limit for the current segment {}/{} ({} seconds remaining)",
+            user_shock_cooldowns
+                .get(&msg.author.id)
+                .expect(
+                    format!(
+                        "Could not access user shock cooldown for {}.",
+                        msg.author.name
+                    )
+                    .as_str()
+                )
+                .shock_count,
+            config.max_shocks_per_segment,
+            seconds_until_reset,
+        );
+            msg.channel_id
+                .say(
+                    &ctx.http,
+                    format!("Wait {} seconds...", seconds_until_reset),
+                )
+                .await
+                .unwrap();
+            do_shock = false;
+        }
+    }
 
     if do_shock {
         let user_shock_cooldowns = data.get_mut::<context::UserShockCooldowns>().unwrap();
