@@ -5,17 +5,17 @@ use serenity::{all::UserId, prelude::*};
 
 use crate::{config, ShockCooldown};
 
-pub struct Shocker;
+pub(crate) struct Shocker;
 impl TypeMapKey for Shocker {
     type Value = PiShocker;
 }
 
-pub struct Config;
+pub(crate) struct Config;
 impl TypeMapKey for Config {
     type Value = config::Config;
 }
 
-pub struct UserShockCooldowns;
+pub(crate) struct UserShockCooldowns;
 impl TypeMapKey for UserShockCooldowns {
     type Value = HashMap<UserId, ShockCooldown>;
 }

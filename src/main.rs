@@ -29,11 +29,11 @@ impl ShockCooldown {
     /// * `segment_length` - The amount of time between segment resets.
     /// * `maximum_shocks` - The maximum number of shocks allowed before a segment reset.
     fn can_shock(&mut self, segment_length: std::time::Duration, maximum_shocks: u32) -> bool {
-        let mut stopwatch = self.stopwatch.unwrap_or(std::time::Instant::now());
+        let stopwatch = self.stopwatch.unwrap_or(std::time::Instant::now());
 
-        // Reset the cooldown if the segment_length has been reached.
+        // Reset the stopwatch and shock_count if the segment_length has been reached.
         if stopwatch.elapsed() >= segment_length {
-            stopwatch = std::time::Instant::now();
+            self.stopwatch = Some(std::time::Instant::now());
             self.shock_count = 0;
         }
 
@@ -61,8 +61,8 @@ impl EventHandler for Handler {
 
 async fn word_shock(ctx: Context, msg: Message) {
     let mut data = ctx.data.write().await;
-    let config = data.get::<context::Config>().unwrap();
-    let shocker = data.get::<context::Shocker>().unwrap();
+    let config = data.get::<context::Config>().unwrap().clone();
+    let shocker = data.get::<context::Shocker>().unwrap().clone();
 
     let split_sentence = Regex::new(r"(\b[^\s]+\b)").unwrap();
 
