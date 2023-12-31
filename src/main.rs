@@ -17,7 +17,7 @@ use serenity::{
 #[derive(Debug, Clone)]
 struct ShockCooldown {
     /// The timestamp that the block started at.
-    stopwatch: Option<std::time::Instant>,
+    stopwatch: std::time::Instant,
     /// The number of times the user has dealt a shock during the last block.
     shock_count: u32,
 }
@@ -29,16 +29,14 @@ impl ShockCooldown {
     /// * `segment_length` - The amount of time between segment resets.
     /// * `maximum_shocks` - The maximum number of shocks allowed before a segment reset.
     fn can_shock(&mut self, segment_length: std::time::Duration, maximum_shocks: u32) -> bool {
-        let stopwatch = self.stopwatch.unwrap_or(std::time::Instant::now());
-
         // Reset the stopwatch and shock_count if the segment_length has been reached.
-        if stopwatch.elapsed() >= segment_length {
-            self.stopwatch = Some(std::time::Instant::now());
+        if self.stopwatch.elapsed() >= segment_length {
+            self.stopwatch = std::time::Instant::now();
             self.shock_count = 0;
         }
 
         // Check to see if the shock_count is below or equal to maximum. Return true if so, and increment shock_count.
-        if self.shock_count <= maximum_shocks {
+        if self.shock_count < maximum_shocks {
             true
         } else {
             false
@@ -80,10 +78,10 @@ async fn word_shock(ctx: Context, msg: Message) {
     let do_shock = 'do_shock: {
         let user_shock_cooldowns = data.get_mut::<context::UserShockCooldowns>().unwrap();
 
-        if user_shock_cooldowns
+        if !user_shock_cooldowns
             .entry(msg.author.id)
             .or_insert(ShockCooldown {
-                stopwatch: None,
+                stopwatch: std::time::Instant::now(),
                 shock_count: 0,
             })
             .can_shock(
@@ -92,7 +90,7 @@ async fn word_shock(ctx: Context, msg: Message) {
             )
         {
             trace!(
-                "User has exceeded shock limit for the current segment {}/{}",
+                "User has exceeded shock limit for the current segment {}/{} ({}/{} seconds)",
                 user_shock_cooldowns
                     .get(&msg.author.id)
                     .expect(
@@ -103,7 +101,14 @@ async fn word_shock(ctx: Context, msg: Message) {
                         .as_str()
                     )
                     .shock_count,
-                config.max_shocks_per_segment
+                config.max_shocks_per_segment,
+                user_shock_cooldowns
+                    .get(&msg.author.id)
+                    .unwrap()
+                    .stopwatch
+                    .elapsed()
+                    .as_secs(),
+                config.cooldown_segment_duration
             );
             break 'do_shock false;
         }
