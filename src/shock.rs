@@ -42,8 +42,7 @@ pub(crate) async fn word_shock(ctx: Context, msg: Message) {
 
         // If any of the words in the message are a trigger word, set do_shock to true.
         for word in message_words {
-            let word_lowercase = word.to_lowercase();
-            if config.trigger_words.iter().any(|x| *x == word_lowercase) {
+            if config.trigger_words.contains(&word.to_lowercase()) {
                 trace!("Caught trigger word. Shock impending...");
                 break 'do_shock true;
             }

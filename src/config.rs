@@ -1,10 +1,12 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct Config {
     pub pishock_config: PishockConfig,
     pub discord_config: DiscordConfig,
-    pub trigger_words: Vec<String>,
+    pub trigger_words: HashSet<String>,
     pub cooldown_segment_duration: u32,
     pub max_shocks_per_segment: u32,
 }
