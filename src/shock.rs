@@ -130,7 +130,7 @@ pub(crate) struct ShockCooldown {
 }
 
 impl ShockCooldown {
-    /// Are there room for more shocks during the current segment? Returns true if the cooldown has room for the shock. Returns false if too many shocks have already been dealt.
+    /// Are there room for more shocks during the current segment? Returns true if the cooldown has room for the shock. Returns false if too many shocks have already been dealt. Resets the stopwatch if it has elapsed `segment_length`.
     ///
     /// # Parameters
     /// * `segment_length` - The amount of time between segment resets.

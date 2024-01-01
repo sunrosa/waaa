@@ -4,8 +4,11 @@ mod shock;
 
 use std::collections::HashMap;
 
-use log::{debug, info};
-use pishock_rs::{PiShockAccount, PiShocker};
+use log::{debug, info, warn};
+use pishock_rs::{
+    errors::PiShockError::{ShockerOffline, ShockerPaused},
+    PiShockAccount, PiShocker,
+};
 use serenity::{
     all::{GatewayIntents, Message, Ready},
     async_trait,
@@ -110,12 +113,22 @@ async fn get_shocker(config: &config::Config) -> PiShocker {
     );
 
     debug!("Fetching PiShocker.");
-    account
-        .get_shocker(
-            config.pishock_config.share_code.clone(),
-        )
-        .await
-        .expect("Could not access the shocker tied to the account configured in the environment variables!")
+    loop {
+        match account
+            .get_shocker(config.pishock_config.share_code.clone())
+            .await
+        {
+            Ok(o) => break o,
+            Err(e) => match e {
+                ShockerPaused | ShockerOffline => {
+                    warn!("Retrying shocker connection...: {e}");
+                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    continue;
+                }
+                _ => panic!("Unrecoverable error accessing PiShock shocker."),
+            },
+        }
+    }
 }
 
 async fn get_config() -> config::Config {
