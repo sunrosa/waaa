@@ -56,7 +56,7 @@ async fn main() {
                 std::io::ErrorKind::PermissionDenied => {
                     log_panic("Permission to access \"config.ron\" denied.", io)
                 }
-                _ => panic!("{io}"),
+                _ => log_panic("IO error accessing \"config.ron\".", io),
             },
             GetConfigError::Spanned(spanned) => log_panic("Error parsing \"config.ron\".", spanned),
         },
