@@ -4,11 +4,12 @@ mod shock;
 
 use std::collections::HashMap;
 
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use pishock_rs::{
     errors::PiShockError::{ShockerOffline, ShockerPaused},
     PiShockAccount, PiShocker,
 };
+use ron::error::SpannedError;
 use serenity::{
     all::{GatewayIntents, Message, Ready},
     async_trait,
@@ -16,6 +17,9 @@ use serenity::{
     Client,
 };
 use shock::word_shock;
+use thiserror::Error;
+
+use crate::config::Config;
 
 struct Handler;
 
@@ -30,11 +34,34 @@ impl EventHandler for Handler {
     }
 }
 
+fn log_panic(message: impl std::fmt::Display, error: impl std::fmt::Display) {
+    error!("{message} : {error}");
+    panic!("{message}\n{error}");
+}
+
 #[tokio::main]
 async fn main() {
     // Initialize log and get config from file.
     initialize_log();
-    let config = get_config().await;
+
+    let mut config: Option<Config> = None;
+    match get_config().await {
+        Ok(o) => config = Some(o),
+        Err(e) => match e {
+            GetConfigError::IO(io) => match io.kind() {
+                std::io::ErrorKind::NotFound => log_panic(
+                    "\"config.ron\" not found. It should be in the executable root directory.",
+                    io,
+                ),
+                std::io::ErrorKind::PermissionDenied => {
+                    log_panic("Permission to access \"config.ron\" denied.", io)
+                }
+                _ => panic!("{io}"),
+            },
+            GetConfigError::Spanned(spanned) => log_panic("Error parsing \"config.ron\".", spanned),
+        },
+    }
+    let config = config.unwrap();
 
     debug!("{config:?}");
 
@@ -131,11 +158,16 @@ async fn get_shocker(config: &config::Config) -> PiShocker {
     }
 }
 
-async fn get_config() -> config::Config {
-    ron::from_str::<config::Config>(
-        &tokio::fs::read_to_string("config.ron")
-            .await
-            .expect("Could not access config.ron."),
-    )
-    .expect("Could not parse config.ron.")
+#[derive(Debug, Error)]
+enum GetConfigError {
+    #[error("IO error.")]
+    IO(#[from] std::io::Error),
+    #[error("Spanned error.")]
+    Spanned(#[from] SpannedError),
+}
+
+async fn get_config() -> Result<config::Config, GetConfigError> {
+    Ok(ron::from_str::<config::Config>(
+        &tokio::fs::read_to_string("config.ron").await?,
+    )?)
 }
